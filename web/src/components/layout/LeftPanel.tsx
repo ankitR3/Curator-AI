@@ -110,33 +110,47 @@ export default function LeftPanel() {
     {
       title: 'Plan & Query',
       icon: Search,
-      subtitle: logs.find((l) => l.includes('Planned search query'))?.replace(/^.*Planned search query:\s*/, '') || null,
+      subtitle:
+        logs.find((l) => l.includes('Planned search query'))?.replace(/^.*Planned search query:\s*/, '') ||
+        (getStepStatus(0) === 'active' ? 'Planning search query...' : null),
     },
     {
       title: 'Web Research',
       icon: FileText,
-      subtitle: logs.find((l) => l.includes('candidate articles')) || (getStepStatus(1) === 'active' ? 'Searching web...' : null),
+      subtitle:
+        logs.find((l) => l.includes('candidate articles')) ||
+        (getStepStatus(1) === 'active' ? 'Searching web for articles...' : null),
     },
     {
       title: 'Article Summaries',
       icon: AlignLeft,
-      subtitle: logs.find((l) => l.includes('Summarized')) || null,
+      subtitle:
+        logs.find((l) => l.includes('Summarized')) ||
+        (getStepStatus(2) === 'active' ? 'Summarizing articles with AI...' : null),
     },
     {
       title: 'Self-Critique Review',
       icon: ShieldCheck,
-      subtitle: status === 'awaiting_human_review'
-        ? 'Awaiting Human Approval'
-        : status === 'completed'
+      subtitle:
+        status === 'awaiting_human_review'
+          ? 'Awaiting Human Approval'
+          : status === 'completed'
           ? 'Approved by Human & Editor'
+          : getStepStatus(3) === 'active'
+          ? 'Drafting & self-critiquing newsletter...'
           : logs.some((l) => l.includes('needs revision'))
-            ? 'Needs revision'
-            : null,
+          ? 'Needs revision'
+          : null,
     },
     {
       title: 'Simulated Send',
       icon: Send,
-      subtitle: status === 'completed' ? 'Saved output file' : null,
+      subtitle:
+        status === 'completed'
+          ? 'Saved output file'
+          : getStepStatus(4) === 'active'
+          ? 'Finalizing & saving file...'
+          : null,
     },
   ];
 

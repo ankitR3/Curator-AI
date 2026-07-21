@@ -12,7 +12,7 @@ export interface Summary {
 
 export type AgentMode = 'auto' | 'hitl';
 
-export type AgentRunStatus = 'completed' | 'awaiting_human_review';
+export type AgentRunStatus = 'idle' | 'running' | 'completed' | 'awaiting_human_review' | 'error';
 
 export interface AgentRunResult {
   status: AgentRunStatus;
