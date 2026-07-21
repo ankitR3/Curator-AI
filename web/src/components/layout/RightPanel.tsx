@@ -1,17 +1,16 @@
 'use client';
 
 import { useState } from 'react';
-import { useDashboardStore } from '@/src/store/useDashboardStore';
-import { 
-  Download, 
-  CheckCircle, 
-  X, 
-  Mail, 
-  Newspaper, 
-  Send, 
+import { useDashboardStore, cleanErrorMessage } from '@/src/store/useDashboardStore';
+import { getApproveAgentUrl } from '@/routes/api-routes';
+import {
+  Download,
+  CheckCircle,
+  X,
+  Mail,
+  Newspaper,
+  Send,
   Loader2,
-  Code,
-  Eye,
   RefreshCw,
   Edit3
 } from 'lucide-react';
@@ -19,14 +18,20 @@ import {
 export default function RightPanel() {
   const {
     status,
+    setStatus,
+    threadId,
+    setThreadId,
     finalOutput,
+    setFinalOutput,
     pendingDraft,
-    approveAgent,
+    setPendingDraft,
     feedback,
     setFeedback,
+    setLogs,
+    addLog,
+    setErrorMessage,
   } = useDashboardStore();
 
-  const [activeTab, setActiveTab] = useState<'preview' | 'code'>('preview');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const rawContent = finalOutput || pendingDraft || '';
@@ -34,8 +39,31 @@ export default function RightPanel() {
   const subjectMatch = rawContent.match(/^SUBJECT:\s*(.*)/i);
   const subjectTitle = subjectMatch ? subjectMatch[1] : 'This Week in AI Agents';
 
-  const handleDownloadHtml = () => {
+  const handleDownloadHtml = async () => {
     if (!htmlContent) return;
+
+    try {
+      if ('showSaveFilePicker' in window) {
+        const handle = await (window as any).showSaveFilePicker({
+          suggestedName: `newsletter_${Date.now()}.html`,
+          types: [
+            {
+              description: 'HTML Document',
+              accept: { 'text/html': ['.html'] },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(htmlContent);
+        await writable.close();
+        return;
+      }
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      console.error('File save picker error:', err);
+    }
+
+    // Fallback standard download
     const blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -48,39 +76,65 @@ export default function RightPanel() {
   };
 
   const handleHumanDecision = async (approve: boolean, customFeedback?: string) => {
+    if (!threadId) return;
+
     setIsSubmitting(true);
+    const effectiveFeedback = customFeedback !== undefined ? customFeedback : feedback;
     if (customFeedback !== undefined) {
       setFeedback(customFeedback);
     }
-    await approveAgent(approve);
-    setIsSubmitting(false);
+
+    setStatus('running');
+    setErrorMessage(null);
+    addLog(approve ? 'Human approved draft. Finalizing...' : `Human requested revision: "${effectiveFeedback}"`);
+
+    try {
+      const res = await fetch(getApproveAgentUrl(threadId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ approve, feedback: effectiveFeedback }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Approval failed with status ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (data.status === 'awaiting_human_review') {
+        setStatus('awaiting_human_review');
+        setThreadId(data.threadId);
+        setPendingDraft(data.pendingDraft || null);
+        setLogs(data.log || []);
+        setFeedback('');
+      } else {
+        const currentDraft = pendingDraft;
+        const resolvedOutput = data.finalOutput || (currentDraft ? `SUBJECT: Your Weekly AI Agent Newsletter\n\n${currentDraft}` : null);
+        setStatus('completed');
+        setThreadId(data.threadId);
+        setFinalOutput(resolvedOutput);
+        setLogs(data.log || []);
+        setFeedback('');
+      }
+    } catch (err: any) {
+      console.error('approveAgent error:', err);
+      const formattedErr = cleanErrorMessage(err.message);
+      setStatus('error');
+      setErrorMessage(formattedErr);
+      addLog(`Error submitting approval: ${formattedErr}`);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
     <div className="flex-1 min-w-0 bg-zinc-900/60 border border-zinc-800/80 rounded-lg flex flex-col justify-between overflow-hidden relative select-none">
-      {/* Top Tabs & Toolbar */}
+      {/* Top Header Bar */}
       <div className="h-12 border-b border-zinc-800/80 px-5 flex items-center justify-between bg-zinc-950/40">
-        <div className="flex items-center gap-4 text-xs font-medium">
-          <button
-            onClick={() => setActiveTab('preview')}
-            className={`py-1.5 px-2 border-b-2 transition ${
-              activeTab === 'preview'
-                ? 'border-indigo-500 text-indigo-400 font-semibold'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            Email preview
-          </button>
-          <button
-            onClick={() => setActiveTab('code')}
-            className={`py-1.5 px-2 border-b-2 transition ${
-              activeTab === 'code'
-                ? 'border-indigo-500 text-indigo-400 font-semibold'
-                : 'border-transparent text-zinc-400 hover:text-zinc-200'
-            }`}
-          >
-            Email (Source)
-          </button>
+        <div className="flex items-center gap-2 text-xs font-semibold text-zinc-300">
+          <Mail className="w-4 h-4 text-indigo-400" />
+          <span>Newsletter Preview</span>
         </div>
 
         {htmlContent && (
@@ -89,7 +143,7 @@ export default function RightPanel() {
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-zinc-900 border border-zinc-800 text-zinc-300 hover:bg-zinc-800 text-xs font-medium transition"
           >
             <Download className="w-3.5 h-3.5 text-indigo-400" />
-            <span>Download HTML</span>
+            <span>Export Newsletter</span>
           </button>
         )}
       </div>
@@ -97,27 +151,21 @@ export default function RightPanel() {
       {/* Main Email Render Preview */}
       <div className="flex-1 p-5 overflow-y-auto flex items-center justify-center bg-zinc-950/40">
         {htmlContent ? (
-          activeTab === 'preview' ? (
-            <div className="w-full max-w-2xl bg-zinc-950 border border-zinc-800/80 rounded-lg shadow-xl overflow-hidden my-auto text-zinc-100">
-              {/* Rendered HTML view */}
-              <div className="p-8 bg-zinc-950 text-zinc-100 max-h-[580px] overflow-y-auto email-preview-content">
-                <div 
-                  dangerouslySetInnerHTML={{ 
-                    __html: htmlContent
-                      .replace(/background-color\s*:\s*([^;"}]+)/gi, 'background-color: transparent')
-                      .replace(/background\s*:\s*(#ffffff|#fff|white)/gi, 'background: transparent')
-                      .replace(/<a[^>]*>(.*?)<\/a>/gi, '$1')
-                      .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-                      .replace(/\*\*/g, '')
-                  }} 
-                />
-              </div>
+          <div className="w-full max-w-2xl bg-zinc-950 border border-zinc-800/80 rounded-lg shadow-xl overflow-hidden my-auto text-zinc-100">
+            {/* Rendered HTML view */}
+            <div className="p-8 bg-zinc-950 text-zinc-100 max-h-[580px] overflow-y-auto email-preview-content">
+              <div
+                dangerouslySetInnerHTML={{
+                  __html: htmlContent
+                    .replace(/background-color\s*:\s*([^;"}]+)/gi, 'background-color: transparent')
+                    .replace(/background\s*:\s*(#ffffff|#fff|white)/gi, 'background: transparent')
+                    .replace(/<a[^>]*>(.*?)<\/a>/gi, '$1')
+                    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*\*/g, '')
+                }}
+              />
             </div>
-          ) : (
-            <div className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-md p-4 font-mono text-xs text-zinc-300 overflow-x-auto my-auto max-h-[580px]">
-              <pre className="whitespace-pre-wrap break-all">{htmlContent}</pre>
-            </div>
-          )
+          </div>
         ) : status === 'running' ? (
           <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">
             <div className="w-12 h-12 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-indigo-400 mb-3">

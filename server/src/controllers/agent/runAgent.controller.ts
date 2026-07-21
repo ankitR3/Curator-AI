@@ -15,7 +15,7 @@ function parseCleanErrorMessage(err: any): string {
         return parsed.error.message;
       }
     }
-  } catch {}
+  } catch { }
   return rawMsg;
 }
 

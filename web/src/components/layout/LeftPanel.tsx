@@ -1,15 +1,16 @@
 'use client';
 
-import { useDashboardStore } from '@/src/store/useDashboardStore';
-import { 
-  Play, 
-  RotateCcw, 
-  Loader2, 
-  CheckCircle2, 
-  Search, 
-  FileText, 
-  AlignLeft, 
-  ShieldCheck, 
+import { useDashboardStore, cleanErrorMessage } from '@/src/store/useDashboardStore';
+import { RUN_AGENT_URL } from '@/routes/api-routes';
+import {
+  Play,
+  RotateCcw,
+  Loader2,
+  CheckCircle2,
+  Search,
+  FileText,
+  AlignLeft,
+  ShieldCheck,
   Send,
   AlertCircle
 } from 'lucide-react';
@@ -21,13 +22,62 @@ export default function LeftPanel() {
     mode,
     setMode,
     status,
-    runAgent,
+    setStatus,
+    setThreadId,
+    setPendingDraft,
+    setFinalOutput,
+    setLogs,
+    addLog,
+    setErrorMessage,
     resetAgent,
     logs,
     errorMessage,
   } = useDashboardStore();
 
   const isRunning = status === 'running';
+
+  const handleRunAgent = async () => {
+    if (!goal.trim()) return;
+
+    setStatus('running');
+    setErrorMessage(null);
+    setFinalOutput(null);
+    setPendingDraft(null);
+    setLogs(['Initiating Newsletter Agent pipeline...']);
+
+    try {
+      const res = await fetch(RUN_AGENT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ goal, mode }),
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server responded with status ${res.status}`);
+      }
+
+      const data = await res.json();
+
+      if (data.status === 'awaiting_human_review') {
+        setStatus('awaiting_human_review');
+        setThreadId(data.threadId);
+        setPendingDraft(data.pendingDraft || null);
+        setLogs(data.log || []);
+      } else {
+        setStatus('completed');
+        setThreadId(data.threadId);
+        setFinalOutput(data.finalOutput || null);
+        setLogs(data.log || []);
+      }
+    } catch (err: any) {
+      console.error('runAgent error:', err);
+      const formattedErr = cleanErrorMessage(err.message);
+      setStatus('error');
+      setErrorMessage(formattedErr);
+      addLog(`Error: ${formattedErr}`);
+    }
+  };
 
   const getStepStatus = (stepIndex: number) => {
     if (status === 'idle') return 'pending';
@@ -73,10 +123,10 @@ export default function LeftPanel() {
       subtitle: status === 'awaiting_human_review'
         ? 'Awaiting Human Approval'
         : status === 'completed'
-        ? 'Approved by Human & Editor'
-        : logs.some((l) => l.includes('needs revision'))
-        ? 'Needs revision'
-        : null,
+          ? 'Approved by Human & Editor'
+          : logs.some((l) => l.includes('needs revision'))
+            ? 'Needs revision'
+            : null,
     },
     {
       title: 'Simulated Send',
@@ -118,11 +168,10 @@ export default function LeftPanel() {
             type="button"
             onClick={() => setMode('auto')}
             disabled={isRunning}
-            className={`py-2 px-3 rounded text-xs font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 select-none ${
-              mode === 'auto'
+            className={`py-2 px-3 rounded text-xs font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 select-none ${mode === 'auto'
                 ? 'bg-zinc-800 text-zinc-100'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'
-            }`}
+              }`}
           >
             Fully Autonomous
           </button>
@@ -130,11 +179,10 @@ export default function LeftPanel() {
             type="button"
             onClick={() => setMode('hitl')}
             disabled={isRunning}
-            className={`py-2 px-3 rounded text-xs font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 select-none ${
-              mode === 'hitl'
+            className={`py-2 px-3 rounded text-xs font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 select-none ${mode === 'hitl'
                 ? 'bg-zinc-800 text-zinc-100'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'
-            }`}
+              }`}
           >
             Human in the Loop
           </button>
@@ -143,7 +191,7 @@ export default function LeftPanel() {
         {/* Run Action Button */}
         <button
           type="button"
-          onClick={runAgent}
+          onClick={handleRunAgent}
           disabled={isRunning || !goal.trim()}
           className="w-full py-2.5 px-4 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-medium text-xs active:scale-[0.99] transition flex items-center justify-center gap-2 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
         >
@@ -178,13 +226,12 @@ export default function LeftPanel() {
               <div key={idx} className="relative flex items-center gap-3.5 pl-1 min-w-0">
                 {/* Step Circle Indicator */}
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs z-10 flex-shrink-0 transition-colors ${
-                    stepState === 'completed'
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs z-10 flex-shrink-0 transition-colors ${stepState === 'completed'
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
                       : stepState === 'active'
-                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
-                      : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
-                  }`}
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+                        : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
+                    }`}
                 >
                   {stepState === 'completed' ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
