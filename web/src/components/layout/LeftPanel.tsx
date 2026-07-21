@@ -92,11 +92,16 @@ export default function LeftPanel() {
     if (status === 'completed') return 'completed';
 
     if (isRunning) {
-      if (stepIndex === 0 && logs.some((l) => l.includes('Planned search query'))) return 'completed';
-      if (stepIndex === 1 && logs.some((l) => l.includes('candidate articles'))) return 'completed';
-      if (stepIndex === 2 && logs.some((l) => l.includes('Summarized'))) return 'completed';
-      if (stepIndex === 3 && logs.some((l) => l.includes('Review'))) return 'completed';
-      return 'active';
+      const hasStep0 = logs.some((l) => l.includes('Planned search query'));
+      const hasStep1 = logs.some((l) => l.includes('candidate articles'));
+      const hasStep2 = logs.some((l) => l.includes('Summarized'));
+      const hasStep3 = logs.some((l) => l.includes('Draft generated') || l.includes('Review'));
+
+      if (stepIndex === 0) return hasStep0 ? 'completed' : 'active';
+      if (stepIndex === 1) return hasStep1 ? 'completed' : hasStep0 ? 'active' : 'pending';
+      if (stepIndex === 2) return hasStep2 ? 'completed' : hasStep1 ? 'active' : 'pending';
+      if (stepIndex === 3) return hasStep3 ? 'completed' : hasStep2 ? 'active' : 'pending';
+      if (stepIndex === 4) return hasStep3 ? 'active' : 'pending';
     }
     return 'pending';
   };
@@ -110,7 +115,7 @@ export default function LeftPanel() {
     {
       title: 'Web Research',
       icon: FileText,
-      subtitle: logs.find((l) => l.includes('candidate articles')) || (status === 'idle' ? null : 'Searching web...'),
+      subtitle: logs.find((l) => l.includes('candidate articles')) || (getStepStatus(1) === 'active' ? 'Searching web...' : null),
     },
     {
       title: 'Article Summaries',
