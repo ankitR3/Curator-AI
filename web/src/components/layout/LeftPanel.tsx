@@ -2,15 +2,15 @@
 
 import { useDashboardStore, cleanErrorMessage } from '@/src/store/useDashboardStore';
 import { RUN_AGENT_URL } from '@/routes/api-routes';
-import { 
-  Play, 
-  RotateCcw, 
-  Loader2, 
-  CheckCircle2, 
-  Search, 
-  FileText, 
-  AlignLeft, 
-  ShieldCheck, 
+import {
+  Play,
+  RotateCcw,
+  Loader2,
+  CheckCircle2,
+  Search,
+  FileText,
+  AlignLeft,
+  ShieldCheck,
   Send,
   AlertCircle
 } from 'lucide-react';
@@ -57,72 +57,18 @@ export default function LeftPanel() {
         throw new Error(errorData.error || `Server responded with status ${res.status}`);
       }
 
-      const reader = res.body?.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
+      const data = await res.json();
 
-      if (reader) {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
-
-          for (const line of lines) {
-            if (!line.trim()) continue;
-            try {
-              const data = JSON.parse(line);
-
-              if (data.error) throw new Error(data.error);
-
-              if (data.log && Array.isArray(data.log)) {
-                setLogs(data.log);
-              }
-
-              if (data.status === 'awaiting_human_review') {
-                setStatus('awaiting_human_review');
-                setThreadId(data.threadId);
-                if (data.pendingDraft) setPendingDraft(data.pendingDraft);
-              } else if (data.status === 'completed') {
-                setStatus('completed');
-                setThreadId(data.threadId);
-                if (data.finalOutput) setFinalOutput(data.finalOutput);
-              }
-            } catch (e: any) {
-              if (e.message && !e.message.includes('JSON')) console.error('Parse chunk error:', e);
-            }
-          }
-        }
-        if (buffer.trim()) {
-          try {
-            const data = JSON.parse(buffer.trim());
-            if (data.log && Array.isArray(data.log)) setLogs(data.log);
-            if (data.status === 'awaiting_human_review') {
-              setStatus('awaiting_human_review');
-              setThreadId(data.threadId);
-              if (data.pendingDraft) setPendingDraft(data.pendingDraft);
-            } else if (data.status === 'completed') {
-              setStatus('completed');
-              setThreadId(data.threadId);
-              if (data.finalOutput) setFinalOutput(data.finalOutput);
-            }
-          } catch {}
-        }
+      if (data.status === 'awaiting_human_review') {
+        setStatus('awaiting_human_review');
+        setThreadId(data.threadId);
+        setPendingDraft(data.pendingDraft || null);
+        setLogs(data.log || []);
       } else {
-        const data = await res.json();
-        if (data.status === 'awaiting_human_review') {
-          setStatus('awaiting_human_review');
-          setThreadId(data.threadId);
-          setPendingDraft(data.pendingDraft || null);
-          setLogs(data.log || []);
-        } else {
-          setStatus('completed');
-          setThreadId(data.threadId);
-          setFinalOutput(data.finalOutput || null);
-          setLogs(data.log || []);
-        }
+        setStatus('completed');
+        setThreadId(data.threadId);
+        setFinalOutput(data.finalOutput || null);
+        setLogs(data.log || []);
       }
     } catch (err: any) {
       console.error('runAgent error:', err);
@@ -146,16 +92,11 @@ export default function LeftPanel() {
     if (status === 'completed') return 'completed';
 
     if (isRunning) {
-      const hasStep0 = logs.some((l) => l.includes('Planned search query'));
-      const hasStep1 = logs.some((l) => l.includes('candidate articles'));
-      const hasStep2 = logs.some((l) => l.includes('Summarized'));
-      const hasStep3 = logs.some((l) => l.includes('Draft generated') || l.includes('Review'));
-
-      if (stepIndex === 0) return hasStep0 ? 'completed' : 'active';
-      if (stepIndex === 1) return hasStep1 ? 'completed' : hasStep0 ? 'active' : 'pending';
-      if (stepIndex === 2) return hasStep2 ? 'completed' : hasStep1 ? 'active' : 'pending';
-      if (stepIndex === 3) return hasStep3 ? 'completed' : hasStep2 ? 'active' : 'pending';
-      if (stepIndex === 4) return hasStep3 ? 'active' : 'pending';
+      if (stepIndex === 0 && logs.some((l) => l.includes('Planned search query'))) return 'completed';
+      if (stepIndex === 1 && logs.some((l) => l.includes('candidate articles'))) return 'completed';
+      if (stepIndex === 2 && logs.some((l) => l.includes('Summarized'))) return 'completed';
+      if (stepIndex === 3 && logs.some((l) => l.includes('Review'))) return 'completed';
+      return 'active';
     }
     return 'pending';
   };
@@ -164,47 +105,33 @@ export default function LeftPanel() {
     {
       title: 'Plan & Query',
       icon: Search,
-      subtitle:
-        logs.find((l) => l.includes('Planned search query'))?.replace(/^.*Planned search query:\s*/, '') ||
-        (getStepStatus(0) === 'active' ? 'Planning search query...' : null),
+      subtitle: logs.find((l) => l.includes('Planned search query'))?.replace(/^.*Planned search query:\s*/, '') || null,
     },
     {
       title: 'Web Research',
       icon: FileText,
-      subtitle:
-        logs.find((l) => l.includes('candidate articles')) ||
-        (getStepStatus(1) === 'active' ? 'Searching web for articles...' : null),
+      subtitle: logs.find((l) => l.includes('candidate articles')) || (status === 'idle' ? null : 'Searching web...'),
     },
     {
       title: 'Article Summaries',
       icon: AlignLeft,
-      subtitle:
-        logs.find((l) => l.includes('Summarized')) ||
-        (getStepStatus(2) === 'active' ? 'Summarizing articles with AI...' : null),
+      subtitle: logs.find((l) => l.includes('Summarized')) || null,
     },
     {
       title: 'Self-Critique Review',
       icon: ShieldCheck,
-      subtitle:
-        status === 'awaiting_human_review'
-          ? 'Awaiting Human Approval'
-          : status === 'completed'
+      subtitle: status === 'awaiting_human_review'
+        ? 'Awaiting Human Approval'
+        : status === 'completed'
           ? 'Approved by Human & Editor'
-          : getStepStatus(3) === 'active'
-          ? 'Drafting & self-critiquing newsletter...'
           : logs.some((l) => l.includes('needs revision'))
-          ? 'Needs revision'
-          : null,
+            ? 'Needs revision'
+            : null,
     },
     {
       title: 'Simulated Send',
       icon: Send,
-      subtitle:
-        status === 'completed'
-          ? 'Saved output file'
-          : getStepStatus(4) === 'active'
-          ? 'Finalizing & saving file...'
-          : null,
+      subtitle: status === 'completed' ? 'Saved output file' : null,
     },
   ];
 
@@ -241,11 +168,10 @@ export default function LeftPanel() {
             type="button"
             onClick={() => setMode('auto')}
             disabled={isRunning}
-            className={`py-2 px-3 rounded text-xs font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 select-none ${
-              mode === 'auto'
+            className={`py-2 px-3 rounded text-xs font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 select-none ${mode === 'auto'
                 ? 'bg-zinc-800 text-zinc-100'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'
-            }`}
+              }`}
           >
             Fully Autonomous
           </button>
@@ -253,11 +179,10 @@ export default function LeftPanel() {
             type="button"
             onClick={() => setMode('hitl')}
             disabled={isRunning}
-            className={`py-2 px-3 rounded text-xs font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 select-none ${
-              mode === 'hitl'
+            className={`py-2 px-3 rounded text-xs font-medium transition-colors outline-none focus:outline-none focus:ring-0 focus-visible:outline-none focus-visible:ring-0 select-none ${mode === 'hitl'
                 ? 'bg-zinc-800 text-zinc-100'
                 : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/50'
-            }`}
+              }`}
           >
             Human in the Loop
           </button>
@@ -301,13 +226,12 @@ export default function LeftPanel() {
               <div key={idx} className="relative flex items-center gap-3.5 pl-1 min-w-0">
                 {/* Step Circle Indicator */}
                 <div
-                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs z-10 flex-shrink-0 transition-colors ${
-                    stepState === 'completed'
+                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs z-10 flex-shrink-0 transition-colors ${stepState === 'completed'
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/50'
                       : stepState === 'active'
-                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
-                      : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
-                  }`}
+                        ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+                        : 'bg-zinc-900 text-zinc-500 border border-zinc-800'
+                    }`}
                 >
                   {stepState === 'completed' ? (
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
