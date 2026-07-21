@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from 'uuid';
-import { newsletterGraph } from './agentGraphService';
+import { autoGraph, hitlGraph } from './agentGraphService';
 import { AgentMode, AgentRunResult } from '../types';
 
 export async function runNewsletterAgent(
@@ -9,8 +9,9 @@ export async function runNewsletterAgent(
   try {
     const threadId = uuidv4();
     const config = { configurable: { thread_id: threadId } };
+    const targetGraph = mode === 'hitl' ? hitlGraph : autoGraph;
 
-    const result = await newsletterGraph.invoke({ goal, mode }, config);
+    const result = await targetGraph.invoke({ goal, mode }, config);
 
     const interrupted = (result as any).__interrupt__;
     if (interrupted && interrupted.length > 0) {
@@ -42,9 +43,9 @@ export async function approveNewsletter(
   try {
     const config = { configurable: { thread_id: threadId } };
     const { Command } = await import('@langchain/langgraph');
-    const result = await newsletterGraph.invoke(
-        new Command({ resume: { approve, feedback } }) as any,
-        config
+    const result = await hitlGraph.invoke(
+      new Command({ resume: { approve, feedback } }) as any,
+      config
     );
 
     const interrupted = (result as any).__interrupt__;

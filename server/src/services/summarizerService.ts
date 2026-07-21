@@ -1,31 +1,41 @@
-import { getLLM } from './llmService';
+import { getLLM, invokeLLMWithRetry } from './llmService';
 import { Article, Summary } from '../types';
 
 export async function summarizeArticles(articles: Article[]): Promise<Summary[]> {
   try {
+    if (!articles || articles.length === 0) return [];
     const llm = getLLM(0.3);
 
-    const summaries = await Promise.all(
-      articles.map(async (article) => {
-        const prompt = `You are summarizing a news article for a weekly AI-agent-focused newsletter.
+    const topArticles = articles.slice(0, 7);
+    const formattedArticles = topArticles
+      .map((a, i) => `Article #${i + 1}\nTitle: ${a.title}\nURL: ${a.url}\nSnippet: ${(a.snippet || '').slice(0, 250)}`)
+      .join('\n\n');
 
-Title: ${article.title}
-URL: ${article.url}
-Content/snippet: ${article.snippet}
+    const prompt = `Summarize each of the following ${topArticles.length} articles into a punchy 2-sentence summary.
 
-Write a punchy 2-3 sentence summary aimed at developers interested in AI agents.
-Only return the summary text, no preamble.`;
+Return ONLY a valid JSON array of objects with keys: "title", "url", and "summary".
 
-        const res = await llm.invoke(prompt);
-        return {
-          title: article.title,
-          url: article.url,
-          summary: (res.content as string).trim(),
-        };
-      })
-    );
+Articles:
+${formattedArticles}`;
 
-    return summaries;
+    const res = await invokeLLMWithRetry(llm, prompt);
+    const content = (res.content as string).trim();
+
+    const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return parsed.map((item: any, i: number) => ({
+        title: item.title || topArticles[i]?.title || 'Untitled',
+        url: item.url || topArticles[i]?.url || '',
+        summary: item.summary || (topArticles[i]?.snippet || '').slice(0, 200),
+      }));
+    }
+
+    return topArticles.map((a) => ({
+      title: a.title,
+      url: a.url,
+      summary: (a.snippet || '').slice(0, 200),
+    }));
   } catch (err) {
     console.error('summarizeArticles failed:', err);
     throw err;

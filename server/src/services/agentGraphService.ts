@@ -5,17 +5,14 @@ import { NewsletterState, NewsletterStateType } from './agentStateService';
 import { searchAINews } from './searchService';
 import { summarizeArticles } from './summarizerService';
 import { generateNewsletterHtml } from './htmlGeneratorService';
-import { getLLM } from './llmService';
+import { getLLM, invokeLLMWithRetry } from './llmService';
 
 const MAX_REVISIONS = 2;
 
 async function planNode(state: NewsletterStateType) {
   const llm = getLLM(0.2);
-  const res = await llm.invoke(
-    `Goal: "${state.goal}"\n` +
-    `In one sentence, state the search query you'd use to find the latest, most relevant AI agent news. ` +
-    `Return only the query, nothing else.`
-  );
+  const prompt = `Goal: "${state.goal}"\nIn one sentence, state the search query you'd use to find the latest, most relevant tech news. Return only the query, nothing else.`;
+  const res = await invokeLLMWithRetry(llm, prompt);
   const plan = (res.content as string).trim();
   return { plan, log: [`Planned search query: ${plan}`] };
 }
@@ -32,6 +29,8 @@ async function summarizeNode(state: NewsletterStateType) {
 }
 
 async function writeNode(state: NewsletterStateType) {
+  // Pacing delay to avoid Groq rate limit bursts
+  await new Promise((r) => setTimeout(r, 2000));
   const feedback = state.revisionCount > 0 ? state.critique : undefined;
   const html = await generateNewsletterHtml(state.goal, state.summaries, feedback);
   return {
@@ -42,13 +41,9 @@ async function writeNode(state: NewsletterStateType) {
 
 async function reviewNode(state: NewsletterStateType) {
   const llm = getLLM(0);
-  const res = await llm.invoke(
-    `You are a strict editor reviewing a newsletter draft.\n\n` +
-    `Goal: "${state.goal}"\n\nDraft HTML:\n${state.draftHtml}\n\n` +
-    `Check: does it cover the summarized articles, is it well-structured, engaging, and free of ` +
-    `placeholder/broken content? Respond in this exact format:\n` +
-    `APPROVED: yes|no\nFEEDBACK: <specific actionable feedback if no, else "none">`
-  );
+  const plainText = (state.draftHtml || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 1200);
+  const prompt = `You are a strict editor reviewing a newsletter draft text.\n\nGoal: "${state.goal}"\n\nDraft Text:\n${plainText}\n\nCheck: does it cover the articles and is it well structured? Respond in this exact format:\nAPPROVED: yes|no\nFEEDBACK: <short actionable feedback if no, else "none">`;
+  const res = await invokeLLMWithRetry(llm, prompt);
   const text = (res.content as string).trim();
   const approved = /APPROVED:\s*yes/i.test(text);
   const feedbackMatch = text.match(/FEEDBACK:\s*([\s\S]*)/i);
@@ -98,50 +93,59 @@ async function outputNode(state: NewsletterStateType) {
     console.log(' SIMULATED EMAIL SENT ');
     console.log('========================================');
     console.log(`SUBJECT: ${subject}`);
-    console.log(`SAVED TO: ${filePath}`);
+    console.log(`Saved to: ${filePath}`);
     console.log('========================================\n');
   } catch (err) {
-    console.error('Failed to save simulated newsletter to file:', err);
+    console.error('Failed to save output HTML file:', err);
   }
 
-  return {
-    finalOutput,
-    log: ["Newsletter finalized, saved to output directory, and 'sent' (simulated)."],
-  };
+  return { finalOutput, log: ["Newsletter finalized, saved to output directory, and 'sent' (simulated)."] };
 }
 
-function routeAfterReview(state: NewsletterStateType): string {
-  if (state.approved) {
-    return state.mode === "hitl" ? "humanApproval" : "output";
-  }
-  if (state.revisionCount >= MAX_REVISIONS) {
-    return state.mode === "hitl" ? "humanApproval" : "output";
-  }
-  return "write";
+function shouldContinueAuto(state: NewsletterStateType) {
+  if (state.approved) return "outputNode";
+  if (state.revisionCount >= MAX_REVISIONS) return "outputNode";
+  return "writeNode";
 }
 
-function routeAfterHumanApproval(state: NewsletterStateType): string {
-  if (state.humanApproved) return "output";
-  if (state.revisionCount >= MAX_REVISIONS) return "output";
-  return "write";
+function shouldContinueHitl(state: NewsletterStateType) {
+  if (state.humanApproved) return "outputNode";
+  if (state.revisionCount >= MAX_REVISIONS) return "outputNode";
+  return "writeNode";
 }
-
-const graph = new StateGraph(NewsletterState)
-  .addNode('createPlan', planNode)
-  .addNode('research', researchNode)
-  .addNode('summarize', summarizeNode)
-  .addNode('write', writeNode)
-  .addNode('review', reviewNode)
-  .addNode('humanApproval', humanApprovalNode)
-  .addNode('output', outputNode)
-  .addEdge(START, 'createPlan')
-  .addEdge('createPlan', 'research')
-  .addEdge('research', 'summarize')
-  .addEdge('summarize', 'write')
-  .addEdge('write', 'review')
-  .addConditionalEdges('review', routeAfterReview, ['write', 'humanApproval', 'output'])
-  .addConditionalEdges('humanApproval', routeAfterHumanApproval, ['write', 'output'])
-  .addEdge('output', END);
 
 const checkpointer = new MemorySaver();
-export const newsletterGraph = graph.compile({ checkpointer });
+
+export const autoGraph = new StateGraph(NewsletterState)
+  .addNode("createPlan", planNode)
+  .addNode("researchNode", researchNode)
+  .addNode("summarizeNode", summarizeNode)
+  .addNode("writeNode", writeNode)
+  .addNode("reviewNode", reviewNode)
+  .addNode("outputNode", outputNode)
+  .addEdge(START, "createPlan")
+  .addEdge("createPlan", "researchNode")
+  .addEdge("researchNode", "summarizeNode")
+  .addEdge("summarizeNode", "writeNode")
+  .addEdge("writeNode", "reviewNode")
+  .addConditionalEdges("reviewNode", shouldContinueAuto)
+  .addEdge("outputNode", END)
+  .compile({ checkpointer });
+
+export const hitlGraph = new StateGraph(NewsletterState)
+  .addNode("createPlan", planNode)
+  .addNode("researchNode", researchNode)
+  .addNode("summarizeNode", summarizeNode)
+  .addNode("writeNode", writeNode)
+  .addNode("reviewNode", reviewNode)
+  .addNode("humanApprovalNode", humanApprovalNode)
+  .addNode("outputNode", outputNode)
+  .addEdge(START, "createPlan")
+  .addEdge("createPlan", "researchNode")
+  .addEdge("researchNode", "summarizeNode")
+  .addEdge("summarizeNode", "writeNode")
+  .addEdge("writeNode", "reviewNode")
+  .addEdge("reviewNode", "humanApprovalNode")
+  .addConditionalEdges("humanApprovalNode", shouldContinueHitl)
+  .addEdge("outputNode", END)
+  .compile({ checkpointer });

@@ -2,6 +2,23 @@ import { create } from 'zustand';
 import { AgentMode, AgentRunStatus } from '../types';
 import { RUN_AGENT_URL, getApproveAgentUrl } from '../../routes/api-routes';
 
+function cleanErrorMessage(rawMsg: string): string {
+  if (!rawMsg) return 'An unexpected error occurred';
+  if (rawMsg.includes('429') || rawMsg.toLowerCase().includes('rate limit')) {
+    return 'Groq API rate limit reached (12,000 tokens/min limit). Please wait ~30 seconds before running again.';
+  }
+  try {
+    const match = rawMsg.match(/\{[\s\S]*\}/);
+    if (match) {
+      const parsed = JSON.parse(match[0]);
+      if (parsed?.error?.message) {
+        return parsed.error.message;
+      }
+    }
+  } catch {}
+  return rawMsg;
+}
+
 interface DashboardState {
   goal: string;
   mode: AgentMode;
@@ -25,7 +42,7 @@ interface DashboardState {
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => ({
-  goal: 'Create a weekly newsletter on latest AI agent news and send it to our subscribers.',
+  goal: '',
   mode: 'auto',
   status: 'idle',
   threadId: null,
@@ -95,10 +112,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       }
     } catch (err: any) {
       console.error('runAgent error:', err);
+      const formattedErr = cleanErrorMessage(err.message);
       set({
         status: 'error',
-        errorMessage: err.message || 'Failed to communicate with backend server',
-        logs: [...get().logs, `Error: ${err.message || 'Agent run failed'}`],
+        errorMessage: formattedErr,
+        logs: [...get().logs, `Error: ${formattedErr}`],
       });
     }
   },
@@ -146,10 +164,11 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
       }
     } catch (err: any) {
       console.error('approveAgent error:', err);
+      const formattedErr = cleanErrorMessage(err.message);
       set({
         status: 'error',
-        errorMessage: err.message || 'Failed to submit approval',
-        logs: [...get().logs, `Error submitting approval: ${err.message}`],
+        errorMessage: formattedErr,
+        logs: [...get().logs, `Error submitting approval: ${formattedErr}`],
       });
     }
   },
