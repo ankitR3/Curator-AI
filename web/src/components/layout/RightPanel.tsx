@@ -118,6 +118,16 @@ export default function RightPanel() {
               <pre className="whitespace-pre-wrap break-all">{htmlContent}</pre>
             </div>
           )
+        ) : status === 'running' ? (
+          <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">
+            <div className="w-12 h-12 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-indigo-400 mb-3">
+              <Loader2 className="w-6 h-6 animate-spin" />
+            </div>
+            <h3 className="text-sm font-semibold text-zinc-200 mb-1">Generating Newsletter Draft...</h3>
+            <p className="text-xs text-zinc-500 leading-relaxed">
+              Please wait while the AI Agent researches news &amp; builds your newsletter.
+            </p>
+          </div>
         ) : (
           <div className="flex flex-col items-center justify-center text-center p-8 max-w-sm">
             <div className="w-12 h-12 rounded-md bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mb-3">
