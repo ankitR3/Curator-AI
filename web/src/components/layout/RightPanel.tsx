@@ -30,10 +30,7 @@ export default function RightPanel() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const rawContent = finalOutput || pendingDraft || '';
-  let htmlContent = rawContent.replace(/^SUBJECT:.*\n+/i, '').trim();
-  if (!htmlContent && rawContent.trim()) {
-    htmlContent = rawContent.trim();
-  }
+  let htmlContent = rawContent.replace(/^SUBJECT:[^\n]*\n*/i, '').trim();
   const subjectMatch = rawContent.match(/^SUBJECT:\s*(.*)/i);
   const subjectTitle = subjectMatch ? subjectMatch[1] : 'This Week in AI Agents';
 

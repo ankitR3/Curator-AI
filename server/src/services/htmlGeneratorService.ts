@@ -4,10 +4,10 @@ import { Summary } from '../types';
 function sanitizeNewsletterHtml(rawHtml: string): string {
   let html = rawHtml;
 
-  // 1. Remove any HTML block/element containing sign-off keywords, "Stay tuned", "Best regards", etc.
-  html = html.replace(/<(p|div|span|h[1-6]|section|footer)[^>]*>[\s\S]*?(Best regards|Warm regards|Kind regards|Sincerely|Stay tuned|Stay up-to-date|Stay informed|Join the conversation|follow us)[\s\S]*?<\/\1>/gi, '');
+  // 1. Remove ONLY paragraph, span, heading or list elements containing sign-off keywords (NEVER match outer <div> wrapper!)
+  html = html.replace(/<(p|span|h[1-6]|li)[^>]*>[\s\S]*?(Best regards|Warm regards|Kind regards|Sincerely|\[Your Name\])[\s\S]*?<\/\1>/gi, '');
 
-  // 2. Truncate any lingering sign-off block starting with "Best regards", "Warm regards", etc.
+  // 2. Remove trailing sign-offs starting with "Best regards", "Sincerely", etc.
   html = html.replace(/(Best regards|Warm regards|Kind regards|Sincerely)[\s\S]*/gi, '');
 
   // 3. Remove standalone placeholders like [Your Name], [Name], [Your Title]
@@ -20,8 +20,8 @@ function sanitizeNewsletterHtml(rawHtml: string): string {
   html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
   html = html.replace(/\*\*/g, '');
 
-  // 6. Remove empty residual tags created by stripping
-  html = html.replace(/<(p|div|span)[^>]*>\s*<\/\1>/gi, '');
+  // 6. Remove empty residual paragraph/span tags created by stripping
+  html = html.replace(/<(p|span)[^>]*>\s*<\/\1>/gi, '');
 
   return html.trim();
 }
