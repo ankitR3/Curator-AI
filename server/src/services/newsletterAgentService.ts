@@ -23,10 +23,12 @@ export async function runNewsletterAgent(
       };
     }
 
+    const output = result.finalOutput || (result.draftHtml ? `SUBJECT: Your Weekly Newsletter\n\n${result.draftHtml}` : '');
+
     return {
       status: 'completed',
       threadId,
-      finalOutput: result.finalOutput,
+      finalOutput: output,
       log: result.log,
     };
   } catch (err) {
@@ -53,15 +55,17 @@ export async function approveNewsletter(
       return {
         status: 'awaiting_human_review',
         threadId,
-        pendingDraft: interrupted[0].value.draftHtml,
+        pendingDraft: interrupted[0].value.draftHtml || (interrupted[0].value as any)?.pendingDraft || '',
         log: result.log,
       };
     }
 
+    const output = result.finalOutput || (result.draftHtml ? `SUBJECT: Your Weekly Newsletter\n\n${result.draftHtml}` : '');
+
     return {
       status: 'completed',
       threadId,
-      finalOutput: result.finalOutput,
+      finalOutput: output,
       log: result.log,
     };
   } catch (err) {

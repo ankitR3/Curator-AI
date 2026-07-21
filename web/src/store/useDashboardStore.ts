@@ -154,10 +154,12 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
           feedback: '',
         });
       } else {
+        const currentDraft = get().pendingDraft;
+        const resolvedOutput = data.finalOutput || (currentDraft ? `SUBJECT: Your Weekly AI Agent Newsletter\n\n${currentDraft}` : null);
         set({
           status: 'completed',
           threadId: data.threadId,
-          finalOutput: data.finalOutput || null,
+          finalOutput: resolvedOutput,
           logs: data.log || [],
           feedback: '',
         });
