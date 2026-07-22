@@ -11,7 +11,7 @@ const MAX_REVISIONS = 2;
 
 async function planNode(state: NewsletterStateType) {
   const llm = getLLM(0.2);
-  const prompt = `Goal: "${state.goal}"\nIn one sentence, state the search query you'd use to find the latest, most relevant tech news. Return only the query, nothing else.`;
+  const prompt = `Goal: "${state.goal}"\nIn one sentence, state the exact search query you'd use to find the latest, most relevant news matching the user's goal. Return only the search query, nothing else.`;
   const res = await invokeLLMWithRetry(llm, prompt);
   const plan = (res.content as string).trim();
   return { plan, log: [`Planned search query: ${plan}`] };

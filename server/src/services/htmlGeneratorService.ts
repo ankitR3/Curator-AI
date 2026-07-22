@@ -38,23 +38,29 @@ export async function generateNewsletterHtml(
       .map((s, i) => `${i + 1}. ${s.title}\n${s.summary}`)
       .join('\n\n');
 
-    const prompt = `You are a master newsletter writer crafting a weekly tech newsletter.
+    const prompt = `You are a master newsletter writer crafting a curated newsletter for the user.
 
-Original goal: "${goal}"
+Goal topic: "${goal}"
 
-Here are the summarized articles to include:
+Here are the summarized articles gathered:
 ${itemsBlock}
 
-${revisionFeedback ? `IMPORTANT — address this feedback from a previous review:\n${revisionFeedback}\n` : ''}
+${revisionFeedback ? `CRITICAL USER REVISION INSTRUCTION:
+The human reviewer requested this specific change: "${revisionFeedback}"
+- You MUST prioritize this reviewer instruction above all else.
+- If the reviewer asks for a specific topic, focus, or angle (e.g. protests, policy, current events), create prominent, multi-paragraph <h2> / <h3> feature story sections (200-300 words each) specifically covering that requested topic in depth.
+- Update the main <h1> title and introduction paragraph to reflect the reviewer's requested focus topic.
+- Remove or minimize any unrelated background articles so the requested topic takes center stage.
+` : ''}
 
 Drafting Requirements:
-- Catchy <h1> title for the newsletter (e.g. "This Week in AI & Tech")
-- Engaging multi-paragraph introduction analyzing the week's overall tech landscape
-- Feature Stories: Write a detailed section for each article (150-200 words per story). Bold headline using <h2> or <h3> tags (DO NOT use markdown ** asterisks or <a> tags), followed by analysis and key developer takeaways.
+- Catchy <h1> title matching the newsletter's actual focus topic
+- Engaging multi-paragraph introduction
+- Feature Stories: Write detailed multi-paragraph sections for each key story (150-250 words per story). Bold headline using <h2> or <h3> tags (DO NOT use markdown ** asterisks or <a> tags), followed by in-depth analysis and key takeaways.
 - Key Takeaways summary section highlighting top insights
 - ABSOLUTELY NO MARKDOWN ASTESISKS: Do NOT output ** double asterisks anywhere. Use standard HTML tags (<h2>, <h3>, <strong>, <p>) only.
 - ABSOLUTELY NO LINKS: Do NOT output any <a> tags or URLs anywhere in the newsletter.
-- ABSOLUTELY NO SIGN-OFF: Do NOT include any closing signatures, "Stay tuned", "Stay Informed" footers, social media follow lines, or placeholder sign-offs (such as "Best regards, [Your Name]"). End the newsletter directly after the key insights section.
+- ABSOLUTELY NO SIGN-OFF: Do NOT include any closing signatures or placeholder sign-offs (such as "Best regards, [Your Name]").
 - Simple inline CSS: crisp light readable text (#e4e4e7) on dark background (#09090b).
 - Wrap the entire newsletter body in a container: <div style="background-color: #09090b; color: #e4e4e7; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; border-radius: 8px; border: 1px solid #27272a;">...</div>
 - Return ONLY valid HTML code, no markdown code fences, no commentary`;
