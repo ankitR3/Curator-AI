@@ -13,7 +13,7 @@ export async function summarizeArticles(articles: Article[]): Promise<Summary[]>
 
     const prompt = `Summarize each of the following ${topArticles.length} articles into a punchy 2-sentence summary.
 
-Return ONLY a valid JSON array of objects with keys: "title", "url", and "summary".
+Return ONLY a valid JSON array of objects with keys: "title", "url", and "summary". Ensure all string values including URLs are properly enclosed in double quotes.
 
 Articles:
 ${formattedArticles}`;
@@ -23,12 +23,18 @@ ${formattedArticles}`;
 
     const jsonMatch = content.match(/\[\s*\{[\s\S]*\}\s*\]/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      return parsed.map((item: any, i: number) => ({
-        title: item.title || topArticles[i]?.title || 'Untitled',
-        url: item.url || topArticles[i]?.url || '',
-        summary: item.summary || (topArticles[i]?.snippet || '').slice(0, 200),
-      }));
+      try {
+        // Fix unquoted URLs if LLM produced unquoted URLs like "url": https://...
+        const sanitizedJson = jsonMatch[0].replace(/"url"\s*:\s*(https?:\/\/[^\s,}"]+)/gi, '"url": "$1"');
+        const parsed = JSON.parse(sanitizedJson);
+        return parsed.map((item: any, i: number) => ({
+          title: item.title || topArticles[i]?.title || 'Untitled',
+          url: item.url || topArticles[i]?.url || '',
+          summary: item.summary || (topArticles[i]?.snippet || '').slice(0, 200),
+        }));
+      } catch (parseErr) {
+        console.warn('summarizeArticles JSON parse failed, using fallback articles:', parseErr);
+      }
     }
 
     return topArticles.map((a) => ({
@@ -38,6 +44,10 @@ ${formattedArticles}`;
     }));
   } catch (err) {
     console.error('summarizeArticles failed:', err);
-    throw err;
+    return articles.slice(0, 7).map((a) => ({
+      title: a.title,
+      url: a.url,
+      summary: (a.snippet || '').slice(0, 200),
+    }));
   }
 }
