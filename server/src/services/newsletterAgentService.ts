@@ -85,12 +85,11 @@ export async function* approveNewsletterStream(
       return;
     }
 
-    if (chunk.finalOutput || (chunk.approved && chunk.draftHtml)) {
-      const output = chunk.finalOutput || `SUBJECT: Your Weekly Newsletter\n\n${chunk.draftHtml}`;
+    if (chunk.finalOutput) {
       yield {
         status: 'completed',
         threadId,
-        finalOutput: output,
+        finalOutput: chunk.finalOutput,
         log: accumulatedLogs,
       };
       return;
