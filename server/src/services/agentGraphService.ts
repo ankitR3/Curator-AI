@@ -44,7 +44,7 @@ async function writeNode(state: NewsletterStateType) {
     const summaryItems = state.summaries.length > 0
       ? state.summaries.map(s => `<div style="margin-top:16px;"><h3>${s.title}</h3><p>${s.summary}</p></div>`).join('')
       : `<p>Latest updates and insights curated for: <strong>${state.goal}</strong>.</p>`;
-    
+
     html = `<div style="background-color: #09090b; color: #e4e4e7; padding: 24px; font-family: sans-serif; border-radius: 8px;">
       <h1>${state.goal || 'Weekly Tech Newsletter'}</h1>
       ${summaryItems}
@@ -131,11 +131,11 @@ async function outputNode(state: NewsletterStateType) {
     console.error('Failed to save output HTML file:', err);
   }
 
-  return { 
-    finalOutput, 
+  return {
+    finalOutput,
     draftHtml: draft,
     approved: true,
-    log: ["Newsletter finalized, saved to output directory, and 'sent' (simulated)."] 
+    log: ["Newsletter finalized, saved to output directory, and 'sent' (simulated)."]
   };
 }
 
@@ -147,7 +147,7 @@ function shouldContinueAuto(state: NewsletterStateType) {
 
 function shouldContinueHitl(state: NewsletterStateType) {
   if (state.humanApproved) return "outputNode";
-  if (state.revisionCount >= MAX_REVISIONS) return "outputNode";
+  if (state.revisionCount >= 5) return "outputNode";
   return "writeNode";
 }
 
